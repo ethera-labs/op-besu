@@ -433,6 +433,40 @@ public class JsonGenesisConfigOptions implements GenesisConfigOptions {
   }
 
   @Override
+  public OptionalLong getHoloceneTime() {
+    return getOptionalLong("holocenetime");
+  }
+
+  @Override
+  public boolean isHolocene(final long headTime) {
+    if (!isOptimism()) {
+      return false;
+    }
+    var holoceneTime = getHoloceneTime();
+    if (holoceneTime.isPresent()) {
+      return holoceneTime.getAsLong() <= headTime;
+    }
+    return false;
+  }
+
+  @Override
+  public OptionalLong getIsthmusTime() {
+    return getOptionalLong("isthmustime");
+  }
+
+  @Override
+  public boolean isIsthmus(final long headTime) {
+    if (!isOptimism()) {
+      return false;
+    }
+    var isthmusTime = getIsthmusTime();
+    if (isthmusTime.isPresent()) {
+      return isthmusTime.getAsLong() <= headTime;
+    }
+    return false;
+  }
+
+  @Override
   public OptionalLong getInteropTime() {
     return getOptionalLong("interoptime");
   }

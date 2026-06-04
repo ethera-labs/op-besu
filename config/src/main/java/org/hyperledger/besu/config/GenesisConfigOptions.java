@@ -383,6 +383,36 @@ public interface GenesisConfigOptions {
   boolean isGranite(long headTime);
 
   /**
+   * Gets holocene time.
+   *
+   * @return the holocene time
+   */
+  OptionalLong getHoloceneTime();
+
+  /**
+   * Returns whether a fork scheduled at holocene timestamp is active at the given head timestamp.
+   *
+   * @param headTime the current head time
+   * @return the boolean
+   */
+  boolean isHolocene(long headTime);
+
+  /**
+   * Gets isthmus time.
+   *
+   * @return the isthmus time
+   */
+  OptionalLong getIsthmusTime();
+
+  /**
+   * Returns whether a fork scheduled at isthmus timestamp is active at the given head timestamp.
+   *
+   * @param headTime the current head time
+   * @return the boolean
+   */
+  boolean isIsthmus(long headTime);
+
+  /**
    * Gets interop time.
    *
    * @return the interop time

@@ -359,7 +359,15 @@ public class ProtocolScheduleBuilder {
             timestampMilestone(
                 HardforkId.OptimismHardforkId.GRANITE,
                 config.getGraniteTime(),
-                specFactory.graniteDefinition(config)))
+                specFactory.graniteDefinition(config)),
+            timestampMilestone(
+                HardforkId.OptimismHardforkId.HOLOCENE,
+                config.getHoloceneTime(),
+                specFactory.holoceneDefinition(config)),
+            timestampMilestone(
+                HardforkId.OptimismHardforkId.ISTHMUS,
+                config.getIsthmusTime(),
+                specFactory.isthmusDefinition(config)))
         .flatMap(Optional::stream)
         .toList();
   }

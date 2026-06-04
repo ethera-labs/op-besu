@@ -1260,6 +1260,78 @@ public abstract class MainnetProtocolSpecs {
         .name("Granite");
   }
 
+  // Phase 1 scaffolding: Holocene currently inherits Granite behaviour and only differs by name,
+  // so the protocol schedule activates a distinct [Holocene] milestone. The Holocene consensus
+  // change (dynamic EIP-1559 params encoded in the block header extraData) is layered on next.
+  static ProtocolSpecBuilder holoceneDefinition(
+      final Optional<BigInteger> chainId,
+      final boolean enableRevertReason,
+      final GenesisConfigOptions genesisConfigOptions,
+      final EvmConfiguration evmConfiguration,
+      final MiningParameters miningParameters,
+      final boolean isParallelTxProcessingEnabled,
+      final MetricsSystem metricsSystem) {
+    return graniteDefinition(
+            chainId,
+            enableRevertReason,
+            genesisConfigOptions,
+            evmConfiguration,
+            miningParameters,
+            isParallelTxProcessingEnabled,
+            metricsSystem)
+        .name("Holocene");
+  }
+
+  // Isthmus = OP Granite/Holocene wiring (deposit tx, L1 cost, OP fee market, OP precompiles)
+  // upgraded to the Prague EVM: EIP-7702 SET_CODE txs, EIP-2537 BLS12-381 precompiles,
+  // EIP-2935 historical block hashes. Operator fee, withdrawalsRoot header semantics, and the
+  // Engine API V4 forkchoice are layered on next (Phase 2).
+  static ProtocolSpecBuilder isthmusDefinition(
+      final Optional<BigInteger> chainId,
+      final boolean enableRevertReason,
+      final GenesisConfigOptions genesisConfigOptions,
+      final EvmConfiguration evmConfiguration,
+      final MiningParameters miningParameters,
+      final boolean isParallelTxProcessingEnabled,
+      final MetricsSystem metricsSystem) {
+    return holoceneDefinition(
+            chainId,
+            enableRevertReason,
+            genesisConfigOptions,
+            evmConfiguration,
+            miningParameters,
+            isParallelTxProcessingEnabled,
+            metricsSystem)
+        // Prague EVM + gas schedule (EIP-7702 AUTH/SET_CODE, etc.)
+        .gasCalculator(PragueGasCalculator::new)
+        .evmBuilder(
+            (gasCalculator, jdCacheConfig) ->
+                MainnetEVMs.prague(
+                    gasCalculator, chainId.orElse(BigInteger.ZERO), evmConfiguration))
+        // Granite OP precompiles (Cancun + P256 + Granite AltBN128) + Prague BLS12-381 (EIP-2537)
+        .precompileContractRegistryBuilder(MainnetPrecompiledContractRegistries::isthmus)
+        // accept EIP-7702 SET_CODE txs alongside the OP deposit tx; OP L2 has no user BLOB txs
+        .transactionValidatorFactoryBuilder(
+            (evm, gasLimitCalculator, feeMarket) ->
+                new TransactionValidatorFactory(
+                    evm.getGasCalculator(),
+                    gasLimitCalculator,
+                    feeMarket,
+                    true,
+                    chainId,
+                    Set.of(
+                        TransactionType.FRONTIER,
+                        TransactionType.ACCESS_LIST,
+                        TransactionType.EIP1559,
+                        TransactionType.SET_CODE,
+                        TransactionType.OPTIMISM_DEPOSIT),
+                    evm.getEvmVersion().getMaxInitcodeSize(),
+                    genesisConfigOptions))
+        // EIP-2935 historical block hashes
+        .blockHashProcessor(new PragueBlockHashProcessor())
+        .name("Isthmus");
+  }
+
   private static TransactionReceipt frontierTransactionReceiptFactory(
       // ignored because it's always FRONTIER
       final TransactionType __,

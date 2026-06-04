@@ -59,6 +59,8 @@ public class StubGenesisConfigOptions implements GenesisConfigOptions, Cloneable
   private OptionalLong ecotoneTime = OptionalLong.empty();
   private OptionalLong fjordTime = OptionalLong.empty();
   private OptionalLong graniteTime = OptionalLong.empty();
+  private OptionalLong holoceneTime = OptionalLong.empty();
+  private OptionalLong isthmusTime = OptionalLong.empty();
   private OptionalLong interopTime = OptionalLong.empty();
   private OptionalLong terminalBlockNumber = OptionalLong.empty();
   private Optional<Hash> terminalBlockHash = Optional.empty();
@@ -340,6 +342,26 @@ public class StubGenesisConfigOptions implements GenesisConfigOptions, Cloneable
 
   @Override
   public boolean isGranite(final long headTime) {
+    return false;
+  }
+
+  @Override
+  public OptionalLong getHoloceneTime() {
+    return holoceneTime;
+  }
+
+  @Override
+  public boolean isHolocene(final long headTime) {
+    return false;
+  }
+
+  @Override
+  public OptionalLong getIsthmusTime() {
+    return isthmusTime;
+  }
+
+  @Override
+  public boolean isIsthmus(final long headTime) {
     return false;
   }
 
