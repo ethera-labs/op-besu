@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.vertx.core.json.JsonObject;
+import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.Bytes32;
 
 public class EnginePayloadAttributesParameter {
@@ -36,6 +37,8 @@ public class EnginePayloadAttributesParameter {
   private final Boolean noTxPool;
   private final List<String> transactions;
   private final Long gasLimit;
+  // Holocene EIP-1559 parameters (8 bytes: denominator(4) || elasticity(4)), supplied by op-node.
+  private final Bytes eip1559Params;
 
   @JsonCreator
   public EnginePayloadAttributesParameter(
@@ -46,7 +49,8 @@ public class EnginePayloadAttributesParameter {
       @JsonProperty("parentBeaconBlockRoot") final String parentBeaconBlockRoot,
       @JsonProperty("noTxPool") final Boolean noTxPool,
       @JsonProperty("transactions") final List<String> transactions,
-      @JsonProperty("gasLimit") final UnsignedLongParameter gasLimit) {
+      @JsonProperty("gasLimit") final UnsignedLongParameter gasLimit,
+      @JsonProperty("eip1559Params") final String eip1559Params) {
     this.timestamp = Long.decode(timestamp);
     this.prevRandao = Bytes32.fromHexString(prevRandao);
     this.suggestedFeeRecipient = Address.fromHexString(suggestedFeeRecipient);
@@ -56,6 +60,7 @@ public class EnginePayloadAttributesParameter {
     this.noTxPool = noTxPool;
     this.transactions = transactions;
     this.gasLimit = gasLimit == null ? null : gasLimit.getValue();
+    this.eip1559Params = eip1559Params == null ? null : Bytes.fromHexString(eip1559Params);
   }
 
   public Long getTimestamp() {
@@ -90,6 +95,10 @@ public class EnginePayloadAttributesParameter {
     return gasLimit;
   }
 
+  public Bytes getEip1559Params() {
+    return eip1559Params;
+  }
+
   public String serialize() {
     final JsonObject json =
         new JsonObject()
@@ -112,6 +121,9 @@ public class EnginePayloadAttributesParameter {
     }
     if (gasLimit != null) {
       json.put("gasLimit", gasLimit);
+    }
+    if (eip1559Params != null) {
+      json.put("eip1559Params", eip1559Params.toHexString());
     }
     return json.encode();
   }
