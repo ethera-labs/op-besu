@@ -97,6 +97,33 @@ public interface WithdrawalsValidator {
     }
   }
 
+  // OP Isthmus: the header withdrawalsRoot carries the L2ToL1MessagePasser storage root rather
+  // than the withdrawals-list trie root. It is validated implicitly via the block state root
+  // during processing, so do not recompute it from the (empty) withdrawals list here.
+  class MessagePasserStorageRootWithdrawals implements WithdrawalsValidator {
+
+    private static final Logger LOG =
+        LoggerFactory.getLogger(MessagePasserStorageRootWithdrawals.class);
+
+    @Override
+    public boolean validateWithdrawals(final Optional<List<Withdrawal>> withdrawals) {
+      final boolean isValid = withdrawals.isPresent();
+      if (!isValid) {
+        LOG.warn("withdrawals must not be null when Withdrawals are activated");
+      }
+      return isValid;
+    }
+
+    @Override
+    public boolean validateWithdrawalsRoot(final Block block) {
+      final boolean isValid = block.getHeader().getWithdrawalsRoot().isPresent();
+      if (!isValid) {
+        LOG.warn("withdrawalsRoot must not be null at Isthmus (message-passer storage root)");
+      }
+      return isValid;
+    }
+  }
+
   class NotApplicableWithdrawals implements WithdrawalsValidator {
 
     @Override

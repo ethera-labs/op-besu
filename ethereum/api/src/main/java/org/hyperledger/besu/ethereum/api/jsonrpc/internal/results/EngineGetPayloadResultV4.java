@@ -100,6 +100,8 @@ public class EngineGetPayloadResultV4 {
     private final String excessBlobGas;
     private final String blobGasUsed;
     private final String parentBeaconBlockRoot;
+    // OP Isthmus: header withdrawalsRoot = L2ToL1MessagePasser storage root.
+    private final String withdrawalsRoot;
 
     protected final List<String> transactions;
     private final List<WithdrawalParameter> withdrawals;
@@ -165,6 +167,7 @@ public class EngineGetPayloadResultV4 {
           header.getExcessBlobGas().map(Quantity::create).orElse(Quantity.HEX_ZERO);
       this.parentBeaconBlockRoot =
           header.getParentBeaconBlockRoot().map(Bytes32::toHexString).orElse(null);
+      this.withdrawalsRoot = header.getWithdrawalsRoot().map(h -> h.toString()).orElse(null);
     }
 
     @JsonGetter(value = "blockNumber")
@@ -271,6 +274,12 @@ public class EngineGetPayloadResultV4 {
     @JsonGetter(value = "parentBeaconBlockRoot")
     public String getParentBeaconBlockRoot() {
       return parentBeaconBlockRoot;
+    }
+
+    @JsonGetter(value = "withdrawalsRoot")
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public String getWithdrawalsRoot() {
+      return withdrawalsRoot;
     }
   }
 }

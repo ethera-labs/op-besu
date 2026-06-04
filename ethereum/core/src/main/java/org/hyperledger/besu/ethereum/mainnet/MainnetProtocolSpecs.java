@@ -1334,6 +1334,8 @@ public abstract class MainnetProtocolSpecs {
                     genesisConfigOptions))
         // EIP-2935 historical block hashes
         .blockHashProcessor(new PragueBlockHashProcessor())
+        // Isthmus repurposes withdrawalsRoot as the L2ToL1MessagePasser storage root.
+        .withdrawalsValidator(new WithdrawalsValidator.MessagePasserStorageRootWithdrawals())
         .name("Isthmus");
   }
 

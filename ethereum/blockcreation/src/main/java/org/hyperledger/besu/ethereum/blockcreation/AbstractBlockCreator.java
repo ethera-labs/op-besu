@@ -17,6 +17,7 @@ package org.hyperledger.besu.ethereum.blockcreation;
 import static org.hyperledger.besu.ethereum.mainnet.feemarket.ExcessBlobGasCalculator.calculateExcessBlobGasForParent;
 
 import org.hyperledger.besu.config.GenesisConfigOptions;
+import org.hyperledger.besu.datatypes.AccountValue;
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.BlobGas;
 import org.hyperledger.besu.datatypes.Hash;
@@ -326,11 +327,19 @@ public abstract class AbstractBlockCreator implements AsyncBlockCreator {
               .logsBloom(BodyValidation.logsBloom(transactionResults.getReceipts()))
               .gasUsed(transactionResults.getCumulativeGasUsed())
               .extraData(extraDataCalculator.get(parentHeader))
+              // OP Isthmus: withdrawalsRoot = L2ToL1MessagePasser storage root; requestsHash =
+              // sha256("") empty-requests hash (the L2 carries no EIP-7685 requests).
               .withdrawalsRoot(
-                  withdrawalsCanBeProcessed
-                      ? BodyValidation.withdrawalsRoot(maybeWithdrawals.get())
-                      : null)
-              .requestsRoot(maybeRequests.map(BodyValidation::requestsRoot).orElse(null));
+                  newProtocolSpec.getName().equalsIgnoreCase("isthmus")
+                      ? messagePasserStorageRoot(disposableWorldState)
+                      : (withdrawalsCanBeProcessed
+                          ? BodyValidation.withdrawalsRoot(maybeWithdrawals.get())
+                          : null))
+              .requestsRoot(
+                  newProtocolSpec.getName().equalsIgnoreCase("isthmus")
+                      ? Hash.fromHexString(
+                          "0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+                      : maybeRequests.map(BodyValidation::requestsRoot).orElse(null));
       if (usage != null) {
         builder.blobGasUsed(usage.used.toLong()).excessBlobGas(usage.excessBlobGas);
       }
@@ -472,6 +481,14 @@ public abstract class AbstractBlockCreator implements AsyncBlockCreator {
 
   private List<BlockHeader> selectOmmers() {
     return Lists.newArrayList();
+  }
+
+  // OP Isthmus header withdrawalsRoot = storage root of the L2ToL1MessagePasser predeploy,
+  // read from the post-execution world state.
+  private static Hash messagePasserStorageRoot(final MutableWorldState worldState) {
+    final var account =
+        worldState.get(Address.fromHexString("0x4200000000000000000000000000000000000016"));
+    return account == null ? Hash.EMPTY_TRIE_HASH : ((AccountValue) account).getStorageRoot();
   }
 
   private ProcessableBlockHeader createPendingBlockHeader(
