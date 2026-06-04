@@ -1257,6 +1257,11 @@ public abstract class MainnetProtocolSpecs {
         .precompileContractRegistryBuilder(MainnetPrecompiledContractRegistries::granite)
         .blockHeaderValidatorBuilder(MainnetBlockHeaderValidator::cancunBlockHeaderValidator)
         .blockHashProcessor(new CancunBlockHashProcessor())
+        // Granite (and Holocene/Isthmus, which delegate here) build on the mainnet Shanghai
+        // definition, which does not set genesisConfigOptions. The block processor needs it to
+        // build OPTIMISM_DEPOSIT receipts (Regolith deposit nonce, Canyon receipt version);
+        // without it processBlock throws NoSuchElementException on the L1-attributes deposit tx.
+        .genesisConfigOptions(Optional.of(genesisConfigOptions))
         .name("Granite");
   }
 

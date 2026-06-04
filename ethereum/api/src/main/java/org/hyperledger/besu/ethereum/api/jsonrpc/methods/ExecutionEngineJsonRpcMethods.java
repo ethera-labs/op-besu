@@ -149,7 +149,19 @@ public class ExecutionEngineJsonRpcMethods extends ApiGroupJsonRpcMethods {
               new EnginePreparePayloadDebug(
                   consensusEngineServer, protocolContext, engineQosTimer, mergeCoordinator.get())));
 
-      if (protocolSchedule.anyMatch(p -> p.spec().getName().equalsIgnoreCase("cancun") || p.spec().getName().equalsIgnoreCase("canyon"))) {
+      // getPayloadV3 covers Cancun/Ecotone-era payloads. With OP forks activated at genesis the
+      // schedule collapses to a single milestone named after the latest fork (e.g. "Holocene"),
+      // so match the Cancun-equivalent OP fork names too, not just "cancun"/"canyon".
+      if (protocolSchedule.anyMatch(
+          p -> {
+            final String specName = p.spec().getName();
+            return specName.equalsIgnoreCase("cancun")
+                || specName.equalsIgnoreCase("canyon")
+                || specName.equalsIgnoreCase("ecotone")
+                || specName.equalsIgnoreCase("fjord")
+                || specName.equalsIgnoreCase("granite")
+                || specName.equalsIgnoreCase("holocene");
+          })) {
         executionEngineApisSupported.add(
             new EngineGetPayloadV3(
                 consensusEngineServer,
@@ -160,7 +172,10 @@ public class ExecutionEngineJsonRpcMethods extends ApiGroupJsonRpcMethods {
                 protocolSchedule));
       }
 
-      if (protocolSchedule.anyMatch(p -> p.spec().getName().equalsIgnoreCase("prague"))) {
+      if (protocolSchedule.anyMatch(
+          p ->
+              p.spec().getName().equalsIgnoreCase("prague")
+                  || p.spec().getName().equalsIgnoreCase("isthmus"))) {
         executionEngineApisSupported.add(
             new EngineGetPayloadV4(
                 consensusEngineServer,
