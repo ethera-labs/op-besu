@@ -197,6 +197,11 @@ public final class GenesisState {
     }
   }
 
+  // EIP-7685 hash of an empty requests set: sha256(""). OP Isthmus headers carry this constant
+  // because the L2 has no execution-layer (7002/6110/7251) requests.
+  private static final Hash ISTHMUS_EMPTY_REQUESTS_HASH =
+      Hash.fromHexString("0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+
   private static BlockHeader buildHeader(
       final GenesisConfigFile genesis,
       final Hash genesisRootHash,
@@ -225,7 +230,12 @@ public final class GenesisState {
         .excessBlobGas(isCancunAtGenesis(genesis) ? parseExcessBlobGas(genesis) : null)
         .parentBeaconBlockRoot(
             (isCancunAtGenesis(genesis) ? parseParentBeaconBlockRoot(genesis) : null))
-        .requestsRoot(isPragueAtGenesis(genesis) ? Hash.EMPTY_TRIE_HASH : null)
+        // OP Isthmus headers carry the EIP-7685 empty-requests hash (sha256("")), since OP L2 has
+        // no system-contract requests. Pre-Isthmus Prague (mainnet) keeps the empty-trie root.
+        .requestsRoot(
+            isIsthmusAtGenesis(genesis)
+                ? ISTHMUS_EMPTY_REQUESTS_HASH
+                : (isPragueAtGenesis(genesis) ? Hash.EMPTY_TRIE_HASH : null))
         .buildBlockHeader();
   }
 
@@ -326,6 +336,14 @@ public final class GenesisState {
       return genesis.getTimestamp() >= pragueTimestamp.getAsLong();
     }
     return isPragueEOFAtGenesis(genesis);
+  }
+
+  // OP Isthmus is active at genesis when an isthmusTime is configured at or before the genesis
+  // timestamp. Isthmus headers carry a Prague-shaped requestsHash and repurpose withdrawalsRoot
+  // (handled in buildHeader).
+  private static boolean isIsthmusAtGenesis(final GenesisConfigFile genesis) {
+    final OptionalLong isthmusTimestamp = genesis.getConfigOptions().getIsthmusTime();
+    return isthmusTimestamp.isPresent() && genesis.getTimestamp() >= isthmusTimestamp.getAsLong();
   }
 
   private static boolean isPragueEOFAtGenesis(final GenesisConfigFile genesis) {
