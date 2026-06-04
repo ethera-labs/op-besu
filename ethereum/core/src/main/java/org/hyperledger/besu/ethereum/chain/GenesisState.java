@@ -19,6 +19,7 @@ import static org.hyperledger.besu.ethereum.trie.common.GenesisWorldStateProvide
 
 import org.hyperledger.besu.config.GenesisAccount;
 import org.hyperledger.besu.config.GenesisConfigFile;
+import org.hyperledger.besu.datatypes.AccountValue;
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.BlobGas;
 import org.hyperledger.besu.datatypes.Hash;
@@ -123,7 +124,11 @@ public final class GenesisState {
     }
     final Block block =
         new Block(
-            buildHeader(genesisConfigFile, genesisStateRoot, protocolSchedule),
+            buildHeader(
+                genesisConfigFile,
+                genesisStateRoot,
+                protocolSchedule,
+                messagePasserStorageRoot(dataStorageConfiguration, genesisConfigFile)),
             buildBody(genesisConfigFile));
     return new GenesisState(block, genesisConfigFile);
   }
@@ -142,7 +147,12 @@ public final class GenesisState {
       final ProtocolSchedule protocolSchedule) {
     final Block block =
         new Block(
-            buildHeader(genesisConfigFile, genesisStateRoot, protocolSchedule),
+            buildHeader(
+                genesisConfigFile,
+                genesisStateRoot,
+                protocolSchedule,
+                messagePasserStorageRoot(
+                    DataStorageConfiguration.DEFAULT_CONFIG, genesisConfigFile)),
             buildBody(genesisConfigFile));
     return new GenesisState(block, genesisConfigFile);
   }
@@ -197,15 +207,40 @@ public final class GenesisState {
     }
   }
 
+  // OP Isthmus sets the genesis header withdrawalsRoot to the L2ToL1MessagePasser storage root.
+  // Returns the empty-trie hash for non-Isthmus genesis (and avoids building the world state).
+  private static Hash messagePasserStorageRoot(
+      final DataStorageConfiguration dataStorageConfiguration,
+      final GenesisConfigFile genesisConfigFile) {
+    if (!isIsthmusAtGenesis(genesisConfigFile)) {
+      return Hash.EMPTY_TRIE_HASH;
+    }
+    try (var worldState = createGenesisWorldState(dataStorageConfiguration)) {
+      writeAccountsTo(worldState, genesisConfigFile.streamAllocations(), null);
+      final var account = worldState.get(L2_TO_L1_MESSAGE_PASSER);
+      return account == null
+          ? Hash.EMPTY_TRIE_HASH
+          : ((AccountValue) account).getStorageRoot();
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
   // EIP-7685 hash of an empty requests set: sha256(""). OP Isthmus headers carry this constant
   // because the L2 has no execution-layer (7002/6110/7251) requests.
   private static final Hash ISTHMUS_EMPTY_REQUESTS_HASH =
       Hash.fromHexString("0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
 
+  // OP Isthmus repurposes the header withdrawalsRoot as the storage root of the
+  // L2ToL1MessagePasser predeploy.
+  private static final Address L2_TO_L1_MESSAGE_PASSER =
+      Address.fromHexString("0x4200000000000000000000000000000000000016");
+
   private static BlockHeader buildHeader(
       final GenesisConfigFile genesis,
       final Hash genesisRootHash,
-      final ProtocolSchedule protocolSchedule) {
+      final ProtocolSchedule protocolSchedule,
+      final Hash messagePasserStorageRoot) {
 
     return BlockHeaderBuilder.create()
         .parentHash(parseParentHash(genesis))
@@ -225,7 +260,10 @@ public final class GenesisState {
         .nonce(parseNonce(genesis))
         .blockHeaderFunctions(ScheduleBasedBlockHeaderFunctions.create(protocolSchedule))
         .baseFee(genesis.getGenesisBaseFeePerGas().orElse(null))
-        .withdrawalsRoot(isShanghaiAtGenesis(genesis) ? Hash.EMPTY_TRIE_HASH : null)
+        .withdrawalsRoot(
+            isIsthmusAtGenesis(genesis)
+                ? messagePasserStorageRoot
+                : (isShanghaiAtGenesis(genesis) ? Hash.EMPTY_TRIE_HASH : null))
         .blobGasUsed(isCancunAtGenesis(genesis) ? parseBlobGasUsed(genesis) : null)
         .excessBlobGas(isCancunAtGenesis(genesis) ? parseExcessBlobGas(genesis) : null)
         .parentBeaconBlockRoot(
