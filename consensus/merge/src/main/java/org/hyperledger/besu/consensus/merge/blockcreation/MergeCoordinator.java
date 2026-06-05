@@ -617,7 +617,14 @@ public class MergeCoordinator implements MergeMiningCoordinator, BadChainListene
     MutableBlockchain blockchain = protocolContext.getBlockchain();
     final Optional<BlockHeader> newFinalized = blockchain.getBlockHeader(finalizedBlockHash);
 
-    if (newHead.getNumber() < blockchain.getChainHeadBlockNumber()
+    // On OP Stack the consensus layer's forkchoice is authoritative: after an L1
+    // reorg op-node deliberately rewinds the unsafe head to an earlier block and
+    // re-sequences from it. Besu's stock "ignore update to old head" heuristic (an
+    // L1-only safety optimization) would skip the payload build and return a null
+    // payloadId, permanently wedging the sequencer. For Optimism we honor the
+    // rewind instead, matching op-geth/op-reth, which always follow the CL head.
+    if (!mergeContext.isOptimism()
+        && newHead.getNumber() < blockchain.getChainHeadBlockNumber()
         && isDescendantOf(newHead, blockchain.getChainHeadHeader())) {
       LOG.atDebug()
           .setMessage("Ignoring update to old head {}")
