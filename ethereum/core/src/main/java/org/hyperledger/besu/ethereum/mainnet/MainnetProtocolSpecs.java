@@ -1332,8 +1332,10 @@ public abstract class MainnetProtocolSpecs {
                         TransactionType.OPTIMISM_DEPOSIT),
                     evm.getEvmVersion().getMaxInitcodeSize(),
                     genesisConfigOptions))
-        // EIP-2935 historical block hashes
-        .blockHashProcessor(new PragueBlockHashProcessor())
+        // NOTE: OP Isthmus does NOT adopt EIP-2935 (historical block hashes in state) — op-reth's
+        // block-1 state diff touches only L1Block + the depositor nonce, never 0x..2935. So keep
+        // the Cancun block-hash processor inherited from Granite/Holocene; using
+        // PragueBlockHashProcessor here writes extra state and diverges the world-state root.
         // Isthmus repurposes withdrawalsRoot as the L2ToL1MessagePasser storage root.
         .withdrawalsValidator(new WithdrawalsValidator.MessagePasserStorageRootWithdrawals())
         .name("Isthmus");
