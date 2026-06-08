@@ -16,6 +16,7 @@ package org.hyperledger.besu.ethereum.proof;
 
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Hash;
+import org.hyperledger.besu.datatypes.Wei;
 import org.hyperledger.besu.ethereum.rlp.RLP;
 import org.hyperledger.besu.ethereum.trie.InnerNodeDiscoveryManager;
 import org.hyperledger.besu.ethereum.trie.InnerNodeDiscoveryManager.InnerNode;
@@ -70,16 +71,21 @@ public class WorldStateProofProvider {
       final Proof<Bytes> accountProof =
           newAccountStateTrie(worldStateRoot).getValueWithProof(accountHash);
 
-      return accountProof
-          .getValue()
-          .map(RLP::input)
-          .map(StateTrieAccountValue::readFrom)
-          .map(
-              account -> {
-                final SortedMap<UInt256, Proof<Bytes>> storageProofs =
-                    getStorageProofs(accountHash, account, accountStorageKeys);
-                return new WorldStateProof(account, accountProof, storageProofs);
-              });
+      // For an absent account, return a geth/op-reth-compatible exclusion proof: a zeroed
+      // account together with the trie nodes that prove absence (accountProof already holds
+      // them), instead of erroring. op-succinct's kona witness generation calls eth_getProof
+      // on not-yet-created accounts (e.g. the L1-attributes depositor at genesis) and needs
+      // the exclusion proof rather than a "no account found" error.
+      final StateTrieAccountValue account =
+          accountProof
+              .getValue()
+              .map(RLP::input)
+              .map(StateTrieAccountValue::readFrom)
+              .orElseGet(
+                  () -> new StateTrieAccountValue(0L, Wei.ZERO, Hash.EMPTY_TRIE_HASH, Hash.EMPTY));
+      final SortedMap<UInt256, Proof<Bytes>> storageProofs =
+          getStorageProofs(accountHash, account, accountStorageKeys);
+      return Optional.of(new WorldStateProof(account, accountProof, storageProofs));
     }
   }
 
