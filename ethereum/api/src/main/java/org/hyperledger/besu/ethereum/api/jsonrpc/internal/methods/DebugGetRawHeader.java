@@ -14,10 +14,11 @@
  */
 package org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods;
 
+import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.ethereum.api.jsonrpc.RpcMethod;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.JsonRpcRequestContext;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.exception.InvalidJsonRpcParameters;
-import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.BlockParameter;
+import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.BlockParameterOrBlockHash;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.parameters.JsonRpcParameter.JsonRpcParameterException;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.JsonRpcErrorResponse;
 import org.hyperledger.besu.ethereum.api.jsonrpc.internal.response.RpcErrorType;
@@ -26,7 +27,10 @@ import org.hyperledger.besu.ethereum.rlp.RLP;
 
 import com.google.common.base.Suppliers;
 
-public class DebugGetRawHeader extends AbstractBlockParameterMethod {
+// Accepts a block hash as well as a block number/tag. op-node-driven tooling such as
+// op-succinct's kona witness generation calls debug_getRawHeader by block hash, which
+// op-geth/op-reth support; the stock Besu method took a block number only.
+public class DebugGetRawHeader extends AbstractBlockParameterOrBlockHashMethod {
 
   public DebugGetRawHeader(final BlockchainQueries blockchain) {
     super(Suppliers.ofInstance(blockchain));
@@ -38,22 +42,23 @@ public class DebugGetRawHeader extends AbstractBlockParameterMethod {
   }
 
   @Override
-  protected BlockParameter blockParameter(final JsonRpcRequestContext request) {
+  protected BlockParameterOrBlockHash blockParameterOrBlockHash(
+      final JsonRpcRequestContext request) {
     try {
-      return request.getRequiredParameter(0, BlockParameter.class);
+      return request.getRequiredParameter(0, BlockParameterOrBlockHash.class);
     } catch (JsonRpcParameterException e) {
       throw new InvalidJsonRpcParameters(
-          "Invalid block parameter (index 0)", RpcErrorType.INVALID_BLOCK_PARAMS, e);
+          "Invalid block or block hash parameter (index 0)", RpcErrorType.INVALID_BLOCK_PARAMS, e);
     }
   }
 
   @Override
-  protected Object resultByBlockNumber(
-      final JsonRpcRequestContext request, final long blockNumber) {
-
-    return getBlockchainQueries()
-        .blockByNumber(blockNumber)
-        .<Object>map(block -> RLP.encode(block.getHeader()::writeTo).toString())
+  protected Object resultByBlockHash(final JsonRpcRequestContext request, final Hash blockHash) {
+    return blockchainQueries
+        .get()
+        .getBlockchain()
+        .getBlockHeader(blockHash)
+        .<Object>map(header -> RLP.encode(header::writeTo).toString())
         .orElseGet(
             () ->
                 new JsonRpcErrorResponse(
