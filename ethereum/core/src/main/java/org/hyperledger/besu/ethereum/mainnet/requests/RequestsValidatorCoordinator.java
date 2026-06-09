@@ -51,7 +51,7 @@ public class RequestsValidatorCoordinator {
    *
    * @param validators An immutable map of request types to their corresponding validators.
    */
-  private RequestsValidatorCoordinator(
+  protected RequestsValidatorCoordinator(
       final ImmutableSortedMap<RequestType, RequestValidator> validators) {
     this.validators = validators;
   }

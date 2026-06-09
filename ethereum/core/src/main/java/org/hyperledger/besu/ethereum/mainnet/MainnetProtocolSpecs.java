@@ -20,6 +20,7 @@ import static org.hyperledger.besu.ethereum.mainnet.requests.MainnetRequestsVali
 import static org.hyperledger.besu.ethereum.mainnet.requests.WithdrawalRequestProcessor.DEFAULT_WITHDRAWAL_REQUEST_CONTRACT_ADDRESS;
 
 import org.hyperledger.besu.config.GenesisConfigOptions;
+import org.hyperledger.besu.ethereum.mainnet.requests.OptimismRequestsValidatorCoordinator;
 import org.hyperledger.besu.config.PowAlgorithm;
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.TransactionType;
@@ -1332,12 +1333,22 @@ public abstract class MainnetProtocolSpecs {
                         TransactionType.OPTIMISM_DEPOSIT),
                     evm.getEvmVersion().getMaxInitcodeSize(),
                     genesisConfigOptions))
-        // NOTE: OP Isthmus does NOT adopt EIP-2935 (historical block hashes in state) — op-reth's
-        // block-1 state diff touches only L1Block + the depositor nonce, never 0x..2935. So keep
-        // the Cancun block-hash processor inherited from Granite/Holocene; using
-        // PragueBlockHashProcessor here writes extra state and diverges the world-state root.
+        // OP Isthmus DOES adopt EIP-2935 (historical block hashes in state): the history-storage
+        // contract is deployed at genesis (0x...2935) and op-reth/op-geth write the parent hash
+        // into it every block, so op-besu must too or the world-state root diverges at block 1.
+        // Besu 24.5.6's PragueBlockHashProcessor defaults to the *draft* address (0x0aae...f91e)
+        // and a 8192 window; final EIP-2935 / OP Isthmus uses 0x...2935 and an 8191 ring buffer
+        // (slot = (number-1) % 8191), confirmed by the deployed contract bytecode. Pass both.
+        .blockHashProcessor(
+            new PragueBlockHashProcessor(
+                Address.fromHexString("0x0000F90827F1C53a10cb7A02335B175320002935"), 8191L))
         // Isthmus repurposes withdrawalsRoot as the L2ToL1MessagePasser storage root.
         .withdrawalsValidator(new WithdrawalsValidator.MessagePasserStorageRootWithdrawals())
+        // OP Isthmus adopts the final EIP-7685 commitment but carries no EL requests: every block
+        // commits to an empty requests list via requestsHash = sha256(""), with no requests in the
+        // body and none processed. The stock empty() coordinator rejects any header requestsRoot,
+        // so swap in the OP coordinator that accepts exactly the empty-requests commitment.
+        .requestsValidator(OptimismRequestsValidatorCoordinator.isthmus())
         .name("Isthmus");
   }
 

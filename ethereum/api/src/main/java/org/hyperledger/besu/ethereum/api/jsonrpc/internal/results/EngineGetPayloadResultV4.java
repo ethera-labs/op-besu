@@ -33,12 +33,26 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import org.apache.tuweni.bytes.Bytes32;
 
-@JsonPropertyOrder({"executionPayload", "blockValue", "blobsBundle", "shouldOverrideBuilder"})
+@JsonPropertyOrder({
+  "executionPayload",
+  "blockValue",
+  "blobsBundle",
+  "shouldOverrideBuilder",
+  "parentBeaconBlockRoot",
+  "executionRequests"
+})
 public class EngineGetPayloadResultV4 {
   protected final PayloadResult executionPayload;
   private final String blockValue;
   private final BlobsBundleV1 blobsBundle;
   private final boolean shouldOverrideBuilder;
+  // OP Stack getPayload envelopes carry parentBeaconBlockRoot at the top level (sibling of
+  // executionPayload), as V3 does; op-node requires it to reconstruct the block. Standard L1 V4
+  // omits it, but OP-Isthmus does not.
+  private final String parentBeaconBlockRoot;
+  // Final EIP-7685 puts the flat execution-requests list at the envelope top level (op-node
+  // requires the field present). OP Isthmus processes no EL requests, so it is always empty.
+  private final List<String> executionRequests;
 
   public EngineGetPayloadResultV4(
       final BlockHeader header,
@@ -60,6 +74,9 @@ public class EngineGetPayloadResultV4 {
     this.blockValue = blockValue;
     this.blobsBundle = blobsBundle;
     this.shouldOverrideBuilder = false;
+    this.parentBeaconBlockRoot =
+        header.getParentBeaconBlockRoot().map(Bytes32::toHexString).orElse(null);
+    this.executionRequests = List.of();
   }
 
   @JsonGetter(value = "executionPayload")
@@ -80,6 +97,16 @@ public class EngineGetPayloadResultV4 {
   @JsonGetter(value = "shouldOverrideBuilder")
   public boolean shouldOverrideBuilder() {
     return shouldOverrideBuilder;
+  }
+
+  @JsonGetter(value = "parentBeaconBlockRoot")
+  public String getParentBeaconBlockRoot() {
+    return parentBeaconBlockRoot;
+  }
+
+  @JsonGetter(value = "executionRequests")
+  public List<String> getExecutionRequests() {
+    return executionRequests;
   }
 
   public static class PayloadResult {
