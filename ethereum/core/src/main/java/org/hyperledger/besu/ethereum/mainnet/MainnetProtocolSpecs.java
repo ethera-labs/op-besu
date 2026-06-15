@@ -20,6 +20,7 @@ import static org.hyperledger.besu.ethereum.mainnet.requests.MainnetRequestsVali
 import static org.hyperledger.besu.ethereum.mainnet.requests.WithdrawalRequestProcessor.DEFAULT_WITHDRAWAL_REQUEST_CONTRACT_ADDRESS;
 
 import org.hyperledger.besu.config.GenesisConfigOptions;
+import org.hyperledger.besu.ethereum.mainnet.requests.OptimismRequestsValidatorCoordinator;
 import org.hyperledger.besu.config.PowAlgorithm;
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.TransactionType;
@@ -1257,7 +1258,98 @@ public abstract class MainnetProtocolSpecs {
         .precompileContractRegistryBuilder(MainnetPrecompiledContractRegistries::granite)
         .blockHeaderValidatorBuilder(MainnetBlockHeaderValidator::cancunBlockHeaderValidator)
         .blockHashProcessor(new CancunBlockHashProcessor())
+        // Granite (and Holocene/Isthmus, which delegate here) build on the mainnet Shanghai
+        // definition, which does not set genesisConfigOptions. The block processor needs it to
+        // build OPTIMISM_DEPOSIT receipts (Regolith deposit nonce, Canyon receipt version);
+        // without it processBlock throws NoSuchElementException on the L1-attributes deposit tx.
+        .genesisConfigOptions(Optional.of(genesisConfigOptions))
         .name("Granite");
+  }
+
+  // Phase 1 scaffolding: Holocene currently inherits Granite behaviour and only differs by name,
+  // so the protocol schedule activates a distinct [Holocene] milestone. The Holocene consensus
+  // change (dynamic EIP-1559 params encoded in the block header extraData) is layered on next.
+  static ProtocolSpecBuilder holoceneDefinition(
+      final Optional<BigInteger> chainId,
+      final boolean enableRevertReason,
+      final GenesisConfigOptions genesisConfigOptions,
+      final EvmConfiguration evmConfiguration,
+      final MiningParameters miningParameters,
+      final boolean isParallelTxProcessingEnabled,
+      final MetricsSystem metricsSystem) {
+    return graniteDefinition(
+            chainId,
+            enableRevertReason,
+            genesisConfigOptions,
+            evmConfiguration,
+            miningParameters,
+            isParallelTxProcessingEnabled,
+            metricsSystem)
+        .name("Holocene");
+  }
+
+  // Isthmus = OP Granite/Holocene wiring (deposit tx, L1 cost, OP fee market, OP precompiles)
+  // upgraded to the Prague EVM: EIP-7702 SET_CODE txs, EIP-2537 BLS12-381 precompiles,
+  // EIP-2935 historical block hashes. Operator fee, withdrawalsRoot header semantics, and the
+  // Engine API V4 forkchoice are layered on next (Phase 2).
+  static ProtocolSpecBuilder isthmusDefinition(
+      final Optional<BigInteger> chainId,
+      final boolean enableRevertReason,
+      final GenesisConfigOptions genesisConfigOptions,
+      final EvmConfiguration evmConfiguration,
+      final MiningParameters miningParameters,
+      final boolean isParallelTxProcessingEnabled,
+      final MetricsSystem metricsSystem) {
+    return holoceneDefinition(
+            chainId,
+            enableRevertReason,
+            genesisConfigOptions,
+            evmConfiguration,
+            miningParameters,
+            isParallelTxProcessingEnabled,
+            metricsSystem)
+        // Prague EVM + gas schedule (EIP-7702 AUTH/SET_CODE, etc.)
+        .gasCalculator(PragueGasCalculator::new)
+        .evmBuilder(
+            (gasCalculator, jdCacheConfig) ->
+                MainnetEVMs.prague(
+                    gasCalculator, chainId.orElse(BigInteger.ZERO), evmConfiguration))
+        // Granite OP precompiles (Cancun + P256 + Granite AltBN128) + Prague BLS12-381 (EIP-2537)
+        .precompileContractRegistryBuilder(MainnetPrecompiledContractRegistries::isthmus)
+        // accept EIP-7702 SET_CODE txs alongside the OP deposit tx; OP L2 has no user BLOB txs
+        .transactionValidatorFactoryBuilder(
+            (evm, gasLimitCalculator, feeMarket) ->
+                new TransactionValidatorFactory(
+                    evm.getGasCalculator(),
+                    gasLimitCalculator,
+                    feeMarket,
+                    true,
+                    chainId,
+                    Set.of(
+                        TransactionType.FRONTIER,
+                        TransactionType.ACCESS_LIST,
+                        TransactionType.EIP1559,
+                        TransactionType.SET_CODE,
+                        TransactionType.OPTIMISM_DEPOSIT),
+                    evm.getEvmVersion().getMaxInitcodeSize(),
+                    genesisConfigOptions))
+        // OP Isthmus DOES adopt EIP-2935 (historical block hashes in state): the history-storage
+        // contract is deployed at genesis (0x...2935) and op-reth/op-geth write the parent hash
+        // into it every block, so op-besu must too or the world-state root diverges at block 1.
+        // Besu 24.5.6's PragueBlockHashProcessor defaults to the *draft* address (0x0aae...f91e)
+        // and a 8192 window; final EIP-2935 / OP Isthmus uses 0x...2935 and an 8191 ring buffer
+        // (slot = (number-1) % 8191), confirmed by the deployed contract bytecode. Pass both.
+        .blockHashProcessor(
+            new PragueBlockHashProcessor(
+                Address.fromHexString("0x0000F90827F1C53a10cb7A02335B175320002935"), 8191L))
+        // Isthmus repurposes withdrawalsRoot as the L2ToL1MessagePasser storage root.
+        .withdrawalsValidator(new WithdrawalsValidator.MessagePasserStorageRootWithdrawals())
+        // OP Isthmus adopts the final EIP-7685 commitment but carries no EL requests: every block
+        // commits to an empty requests list via requestsHash = sha256(""), with no requests in the
+        // body and none processed. The stock empty() coordinator rejects any header requestsRoot,
+        // so swap in the OP coordinator that accepts exactly the empty-requests commitment.
+        .requestsValidator(OptimismRequestsValidatorCoordinator.isthmus())
+        .name("Isthmus");
   }
 
   private static TransactionReceipt frontierTransactionReceiptFactory(

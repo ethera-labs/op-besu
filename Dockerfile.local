@@ -1,0 +1,31 @@
+# Native arm64 source build of op-besu (op-stack branch).
+# The published ghcr image bundles a misbuilt JRE that SIGILLs on Apple Silicon;
+# this builds the distribution ourselves and runs it on Ubuntu's stock openjdk-21
+# (verified working on this host).
+
+# ---- build stage ----
+FROM eclipse-temurin:21-jdk AS build
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+COPY . .
+RUN git config --global --add safe.directory /src || true
+# Exclude tests/style/license/javadoc to get a runnable dist fast.
+# Cache mounts persist the Gradle distribution + dependency cache across rebuilds.
+RUN --mount=type=cache,target=/root/.gradle,sharing=locked \
+    ./gradlew --no-daemon -x test -x spotlessCheck -x spotlessApply -x checkLicense -x javadoc installDist
+
+# ---- runtime stage (mirrors op-besu/docker/Dockerfile) ----
+FROM ubuntu:24.04
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openjdk-21-jre-headless libjemalloc-dev adduser && \
+    apt-get clean && rm -rf /var/lib/apt/lists/* && \
+    (userdel ubuntu 2>/dev/null || true) && rm -rf /home/ubuntu && \
+    adduser --uid 1000 --disabled-password --gecos "" --home /opt/besu besu && \
+    chown besu:besu /opt/besu && chmod 0755 /opt/besu
+USER besu
+WORKDIR /opt/besu
+COPY --from=build --chown=besu:besu /src/build/install/op-besu /opt/besu/
+ENV PATH="/opt/besu/bin:${PATH}"
+# Quiet the harmless arm64 SVE warning seen on Apple Silicon Docker Desktop.
+ENV JAVA_OPTS="-XX:UseSVE=0"
+ENTRYPOINT ["besu"]

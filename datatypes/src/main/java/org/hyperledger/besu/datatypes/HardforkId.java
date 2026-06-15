@@ -178,6 +178,10 @@ public interface HardforkId {
     FJORD(true, "Fjord"),
     /** Granite fork. */
     GRANITE(true, "Granite"),
+    /** Holocene fork. */
+    HOLOCENE(true, "Holocene"),
+    /** Isthmus fork. */
+    ISTHMUS(true, "Isthmus"),
     /** Interop fork. */
     INTEROP(false, "Interop");
 

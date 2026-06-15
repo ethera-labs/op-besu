@@ -283,13 +283,22 @@ public abstract class AbstractEngineNewPayload extends ExecutionEngineJsonRpcMet
             blockParam.getBaseFeePerGas(),
             blockParam.getPrevRandao(),
             0,
-            maybeWithdrawals.map(BodyValidation::withdrawalsRoot).orElse(null),
+            // OP Isthmus supplies withdrawalsRoot explicitly (= L2ToL1MessagePasser storage root);
+            // pre-Isthmus it is derived from the withdrawals list.
+            blockParam.getWithdrawalsRoot() != null
+                ? blockParam.getWithdrawalsRoot()
+                : maybeWithdrawals.map(BodyValidation::withdrawalsRoot).orElse(null),
             blockParam.getBlobGasUsed(),
             blockParam.getExcessBlobGas() == null
                 ? null
                 : BlobGas.fromHexString(blockParam.getExcessBlobGas()),
             maybeParentBeaconBlockRoot.orElse(null),
-            maybeRequests.map(BodyValidation::requestsRoot).orElse(null),
+            // OP Isthmus (signalled by an explicit withdrawalsRoot) carries the EIP-7685
+            // empty-requests hash sha256("") rather than a derived requests-list root.
+            blockParam.getWithdrawalsRoot() != null
+                ? Hash.fromHexString(
+                    "0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+                : maybeRequests.map(BodyValidation::requestsRoot).orElse(null),
             headerFunctions);
 
     // ensure the block hash matches the blockParam hash

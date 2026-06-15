@@ -223,6 +223,41 @@ public interface MainnetPrecompiledContracts {
   }
 
   /**
+   * Isthmus precompile contract registry.
+   *
+   * @param gasCalculator the gas calculator
+   * @return the precompile contract registry
+   */
+  static PrecompileContractRegistry isthmus(final GasCalculator gasCalculator) {
+    PrecompileContractRegistry precompileContractRegistry = new PrecompileContractRegistry();
+    populateForIsthmus(precompileContractRegistry, gasCalculator);
+    return precompileContractRegistry;
+  }
+
+  /**
+   * Populate registry for Isthmus (OP). Cumulative over Granite (Cancun + RIP-7212 P256 +
+   * Granite AltBN128 pairing) plus the Prague EIP-2537 BLS12-381 precompiles.
+   *
+   * @param registry the registry
+   * @param gasCalculator the gas calculator
+   */
+  static void populateForIsthmus(
+      final PrecompileContractRegistry registry, final GasCalculator gasCalculator) {
+    populateForGranite(registry, gasCalculator);
+
+    // EIP-2537 - BLS12-381 curve operations (introduced for OP at Isthmus)
+    registry.put(Address.BLS12_G1ADD, new BLS12G1AddPrecompiledContract());
+    registry.put(Address.BLS12_G1MUL, new BLS12G1MulPrecompiledContract());
+    registry.put(Address.BLS12_G1MULTIEXP, new BLS12G1MultiExpPrecompiledContract());
+    registry.put(Address.BLS12_G2ADD, new BLS12G2AddPrecompiledContract());
+    registry.put(Address.BLS12_G2MUL, new BLS12G2MulPrecompiledContract());
+    registry.put(Address.BLS12_G2MULTIEXP, new BLS12G2MultiExpPrecompiledContract());
+    registry.put(Address.BLS12_PAIRING, new BLS12PairingPrecompiledContract());
+    registry.put(Address.BLS12_MAP_FP_TO_G1, new BLS12MapFpToG1PrecompiledContract());
+    registry.put(Address.BLS12_MAP_FP2_TO_G2, new BLS12MapFp2ToG2PrecompiledContract());
+  }
+
+  /**
    * FutureEIPs precompile contract registry.
    *
    * @param gasCalculator the gas calculator

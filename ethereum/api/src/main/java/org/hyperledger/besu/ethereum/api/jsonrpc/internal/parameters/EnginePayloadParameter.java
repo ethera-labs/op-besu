@@ -41,6 +41,8 @@ public class EnginePayloadParameter {
   private final LogsBloomFilter logsBloom;
   private final List<String> transactions;
   private final List<WithdrawalParameter> withdrawals;
+  // OP Isthmus: explicit header withdrawalsRoot (= L2ToL1MessagePasser storage root).
+  private final Hash withdrawalsRoot;
   private final Long blobGasUsed;
   private final String excessBlobGas;
   private final List<DepositRequestParameter> depositRequests;
@@ -94,7 +96,8 @@ public class EnginePayloadParameter {
       @JsonProperty("withdrawalRequests")
           final List<WithdrawalRequestParameter> withdrawalRequestParameters,
       @JsonProperty("consolidationRequests")
-          final List<ConsolidationRequestParameter> consolidationRequests) {
+          final List<ConsolidationRequestParameter> consolidationRequests,
+      @JsonProperty("withdrawalsRoot") final Hash withdrawalsRoot) {
     this.blockHash = blockHash;
     this.parentHash = parentHash;
     this.feeRecipient = feeRecipient;
@@ -115,6 +118,7 @@ public class EnginePayloadParameter {
     this.depositRequests = depositRequests;
     this.withdrawalRequests = withdrawalRequestParameters;
     this.consolidationRequests = consolidationRequests;
+    this.withdrawalsRoot = withdrawalsRoot;
   }
 
   public Hash getBlockHash() {
@@ -175,6 +179,10 @@ public class EnginePayloadParameter {
 
   public List<WithdrawalParameter> getWithdrawals() {
     return withdrawals;
+  }
+
+  public Hash getWithdrawalsRoot() {
+    return withdrawalsRoot;
   }
 
   public Long getBlobGasUsed() {

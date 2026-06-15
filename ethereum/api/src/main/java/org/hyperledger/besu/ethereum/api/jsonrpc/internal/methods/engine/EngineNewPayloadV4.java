@@ -69,7 +69,8 @@ public class EngineNewPayloadV4 extends AbstractEngineNewPayload {
       return ValidationResult.invalid(
           RpcErrorType.INVALID_PARENT_BEACON_BLOCK_ROOT_PARAMS,
           "Missing parent beacon block root field");
-    } else if (payloadParameter.getDepositRequests() == null) {
+    } else if (!mergeContext.get().isOptimism() && payloadParameter.getDepositRequests() == null) {
+      // OP Isthmus carries no EIP-7685 execution requests in the payload, so don't require them.
       return ValidationResult.invalid(RpcErrorType.INVALID_PARAMS, "Missing deposit field");
     } else {
       return ValidationResult.valid();
@@ -78,6 +79,10 @@ public class EngineNewPayloadV4 extends AbstractEngineNewPayload {
 
   @Override
   protected ValidationResult<RpcErrorType> validateForkSupported(final long blockTimestamp) {
+    // OP activates newPayloadV4 at Isthmus (its protocol schedule has no "Prague" milestone).
+    if (mergeContext.get().isOptimism()) {
+      return ValidationResult.valid();
+    }
     return ForkSupportHelper.validateForkSupported(PRAGUE, pragueMilestone, blockTimestamp);
   }
 }

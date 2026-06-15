@@ -257,6 +257,28 @@ public class MainnetProtocolSpecFactory {
         metricsSystem);
   }
 
+  public ProtocolSpecBuilder holoceneDefinition(final GenesisConfigOptions genesisConfigOptions) {
+    return MainnetProtocolSpecs.holoceneDefinition(
+        chainId,
+        isRevertReasonEnabled,
+        genesisConfigOptions,
+        evmConfiguration,
+        miningParameters,
+        isParallelTxProcessingEnabled,
+        metricsSystem);
+  }
+
+  public ProtocolSpecBuilder isthmusDefinition(final GenesisConfigOptions genesisConfigOptions) {
+    return MainnetProtocolSpecs.isthmusDefinition(
+        chainId,
+        isRevertReasonEnabled,
+        genesisConfigOptions,
+        evmConfiguration,
+        miningParameters,
+        isParallelTxProcessingEnabled,
+        metricsSystem);
+  }
+
   public ProtocolSpecBuilder pragueDefinition(final GenesisConfigOptions genesisConfigOptions) {
     return MainnetProtocolSpecs.pragueDefinition(
         chainId,

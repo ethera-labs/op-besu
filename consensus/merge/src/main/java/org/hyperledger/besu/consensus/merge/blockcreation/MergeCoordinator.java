@@ -144,7 +144,18 @@ public class MergeCoordinator implements MergeMiningCoordinator, BadChainListene
           address.ifPresent(miningParams::setCoinbase);
           return new MergeBlockCreator(
               miningParameters,
-              parent -> miningParameters.getExtraData(),
+              // OP Holocene encodes the EIP-1559 params in the 9-byte block extraData, and op-node
+              // requires every block to carry them — including blocks op-besu builds as a
+              // rollup-boost getPayload fallback (when op-rbuilder misses a slot). The params are
+              // constant per chain and carried from genesis onward, so propagate the parent's
+              // extraData. Besu's static miningParameters.getExtraData() is empty for op-besu and
+              // wedges the sequencer ("holocene extraData should be 9 bytes, got 0").
+              parent ->
+                  (mergeContext.isOptimism()
+                          && parent.getExtraData() != null
+                          && !parent.getExtraData().isEmpty())
+                      ? parent.getExtraData()
+                      : miningParameters.getExtraData(),
               transactionPool,
               protocolContext,
               protocolSchedule,
@@ -617,7 +628,14 @@ public class MergeCoordinator implements MergeMiningCoordinator, BadChainListene
     MutableBlockchain blockchain = protocolContext.getBlockchain();
     final Optional<BlockHeader> newFinalized = blockchain.getBlockHeader(finalizedBlockHash);
 
-    if (newHead.getNumber() < blockchain.getChainHeadBlockNumber()
+    // On OP Stack the consensus layer's forkchoice is authoritative: after an L1
+    // reorg op-node deliberately rewinds the unsafe head to an earlier block and
+    // re-sequences from it. Besu's stock "ignore update to old head" heuristic (an
+    // L1-only safety optimization) would skip the payload build and return a null
+    // payloadId, permanently wedging the sequencer. For Optimism we honor the
+    // rewind instead, matching op-geth/op-reth, which always follow the CL head.
+    if (!mergeContext.isOptimism()
+        && newHead.getNumber() < blockchain.getChainHeadBlockNumber()
         && isDescendantOf(newHead, blockchain.getChainHeadHeader())) {
       LOG.atDebug()
           .setMessage("Ignoring update to old head {}")

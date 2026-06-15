@@ -56,7 +56,8 @@ import org.apache.tuweni.bytes.Bytes32;
   "uncles",
   "transactions",
   "withdrawalsRoot",
-  "withdrawals"
+  "withdrawals",
+  "requestsHash"
 })
 public class BlockResult implements JsonRpcResult {
 
@@ -88,6 +89,11 @@ public class BlockResult implements JsonRpcResult {
   private final String blobGasUsed;
   private final String excessBlobGas;
   private final String parentBeaconBlockRoot;
+  // OP Isthmus (final EIP-7685) commits to requests via the header requestsHash (= sha256("")).
+  // Besu stores it internally as requestsRoot; geth/reth-compatible clients (op-batcher, op-node,
+  // kona) read the JSON field named "requestsHash" and recompute the block hash from it, so it
+  // must be present or the recomputed hash diverges from op-besu's actual block hash.
+  private final String requestsHash;
 
   public BlockResult(
       final BlockHeader header,
@@ -138,6 +144,7 @@ public class BlockResult implements JsonRpcResult {
     this.excessBlobGas = header.getExcessBlobGas().map(Quantity::create).orElse(null);
     this.parentBeaconBlockRoot =
         header.getParentBeaconBlockRoot().map(Bytes32::toHexString).orElse(null);
+    this.requestsHash = header.getRequestsRoot().map(Hash::toString).orElse(null);
   }
 
   @JsonGetter(value = "number")
@@ -254,6 +261,11 @@ public class BlockResult implements JsonRpcResult {
   @JsonGetter(value = "withdrawalsRoot")
   public String getWithdrawalsRoot() {
     return withdrawalsRoot;
+  }
+
+  @JsonGetter(value = "requestsHash")
+  public String getRequestsHash() {
+    return requestsHash;
   }
 
   @JsonGetter(value = "withdrawals")
