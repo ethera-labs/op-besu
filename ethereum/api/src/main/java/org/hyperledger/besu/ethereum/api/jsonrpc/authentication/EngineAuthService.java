@@ -18,10 +18,15 @@ import org.hyperledger.besu.ethereum.api.jsonrpc.internal.methods.JsonRpcMethod;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Optional;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 import io.vertx.core.Handler;
 import io.vertx.core.Vertx;
@@ -47,6 +52,11 @@ public class EngineAuthService implements AuthenticationService {
   public static final String EPHEMERAL_JWT_FILE = "jwt.hex";
 
   private final JWTAuth jwtAuthProvider;
+  // The raw HMAC key used to validate engine JWTs ourselves (see authenticate()), retained so we
+  // can bypass vert.x's JWTAuth.authenticate(), whose User.expired() NPEs on some well-formed
+  // tokens (e.g. rollup-boost/op-node) — it guards on a claim being present in one location but
+  // reads it from another with a null default. That rejected every engine call with 401.
+  private byte[] signingKey;
 
   public EngineAuthService(final Vertx vertx, final Optional<File> signingKey, final Path datadir) {
     final JWTAuthOptions jwtAuthOptions =
@@ -111,6 +121,10 @@ public class EngineAuthService implements AuthenticationService {
       throw e;
     }
 
+    // Retain the raw key so authenticate() can verify tokens directly (HS256 + iat), bypassing
+    // vert.x's expiry validation which NPEs on some clients' tokens.
+    this.signingKey = signingKey;
+
     return new JWTAuthOptions()
         .setJWTOptions(new JWTOptions().setIgnoreExpiration(true).setLeeway(5))
         .addPubSecKey(
@@ -131,31 +145,7 @@ public class EngineAuthService implements AuthenticationService {
 
   @Override
   public void authenticate(final String token, final Handler<Optional<User>> handler) {
-    try {
-      JsonObject jwt = new JsonObject().put("token", token);
-      getJwtAuthProvider()
-          .authenticate(
-              jwt,
-              r -> {
-                if (r.succeeded()) {
-                  if (issuedRecently(r.result().attributes().getLong("iat"))) {
-                    final Optional<User> user = Optional.ofNullable(r.result());
-                    handler.handle(user);
-                  } else {
-                    LOG.warn("Client sent stale token: {}", r.result().attributes());
-                    handler.handle(Optional.empty());
-                  }
-
-                } else {
-                  LOG.debug("Authentication failed: {}", r.cause().toString());
-                  handler.handle(Optional.empty());
-                }
-              });
-
-    } catch (Exception e) {
-      LOG.debug("exception validating JWT ", e);
-      handler.handle(Optional.empty());
-    }
+    handler.handle(verifyEngineToken(token));
   }
 
   @Override
@@ -164,6 +154,61 @@ public class EngineAuthService implements AuthenticationService {
       final JsonRpcMethod jsonRpcMethod,
       final Collection<String> noAuthMethods) {
     return noAuthMethods.contains(jsonRpcMethod.getName()) || optionalUser.isPresent();
+  }
+
+  /**
+   * Validates an engine-API JWT directly instead of routing through {@link JWTAuth#authenticate},
+   * whose {@code User.expired()} NPEs under vert.x 4.5 on otherwise-valid tokens from some
+   * consensus clients (rollup-boost / op-node): it guards on a claim being present in one location
+   * but reads it from another with a null default, throwing and rejecting every engine call with
+   * 401. Per the Engine API authentication spec we verify the HS256 signature with the shared
+   * secret and require an {@code iat} claim within 60 seconds — the same contract op-geth and
+   * op-reth enforce. Returns an empty Optional (treated as 401) on any verification failure.
+   */
+  private Optional<User> verifyEngineToken(final String token) {
+    if (token == null) {
+      return Optional.empty();
+    }
+    final String[] parts = token.split("\\.");
+    if (parts.length != 3) {
+      LOG.debug("Rejecting engine token: malformed JWT");
+      return Optional.empty();
+    }
+    try {
+      final byte[] expectedSignature =
+          hmacSha256(signingKey, (parts[0] + "." + parts[1]).getBytes(StandardCharsets.US_ASCII));
+      final byte[] providedSignature = base64UrlDecode(parts[2]);
+      if (!MessageDigest.isEqual(expectedSignature, providedSignature)) {
+        LOG.debug("Rejecting engine token: signature mismatch");
+        return Optional.empty();
+      }
+      final JsonObject payload = new JsonObject(Buffer.buffer(base64UrlDecode(parts[1])));
+      final Long iat = payload.getLong("iat");
+      if (iat == null || !issuedRecently(iat)) {
+        LOG.warn("Rejecting engine token: missing or stale 'iat' ({})", iat);
+        return Optional.empty();
+      }
+      return Optional.of(User.create(payload));
+    } catch (final Exception e) {
+      LOG.debug("Rejecting engine token: validation error", e);
+      return Optional.empty();
+    }
+  }
+
+  private static byte[] hmacSha256(final byte[] key, final byte[] data) throws Exception {
+    final Mac mac = Mac.getInstance("HmacSHA256");
+    mac.init(new SecretKeySpec(key, "HmacSHA256"));
+    return mac.doFinal(data);
+  }
+
+  /** Decodes a JWT segment (unpadded base64url). */
+  private static byte[] base64UrlDecode(final String segment) {
+    final int paddingNeeded = (4 - (segment.length() % 4)) % 4;
+    final StringBuilder padded = new StringBuilder(segment);
+    for (int i = 0; i < paddingNeeded; i++) {
+      padded.append('=');
+    }
+    return Base64.getUrlDecoder().decode(padded.toString());
   }
 
   private boolean issuedRecently(final long iat) {
