@@ -795,14 +795,36 @@ public class MergeCoordinator implements MergeMiningCoordinator, BadChainListene
         .addArgument(newBlock::toLogString)
         .log();
 
-    // start with self, because descending from yourself is valid
+    // descending from yourself is valid
+    if (newBlock.getBlockHash().equals(ancestorBlock.getBlockHash())) {
+      return true;
+    }
+    // an ancestor can never have a higher block number than its descendant
+    if (ancestorBlock.getNumber() > newBlock.getNumber()) {
+      return false;
+    }
+
+    final Blockchain blockchain = protocolContext.getBlockchain();
+
+    // Fast path: when both blocks are on the canonical chain, ancestry follows from
+    // block-number ordering alone. This is an O(1) check (two number->hash index lookups) and
+    // avoids walking and re-hashing every header between the two. The walk below is pathological
+    // when ancestor and descendant are tens of thousands of blocks apart -- e.g. an op-stack
+    // forkchoiceUpdated whose finalized block is still genesis while the head is far ahead, which
+    // otherwise re-hashes the entire chain on every engine call and stalls block production.
+    if (isCanonical(blockchain, ancestorBlock) && isCanonical(blockchain, newBlock)) {
+      return true;
+    }
+
+    // Slow path: newBlock is on a fork; walk parents until we reach the ancestor or drop below
+    // its height. Bounded by the fork depth back to the canonical chain.
     Optional<BlockHeader> parentOf = Optional.of(newBlock);
 
     while (parentOf.isPresent()
         && !parentOf.get().getBlockHash().equals(ancestorBlock.getBlockHash())
         && parentOf.get().getNumber()
             >= ancestorBlock.getNumber()) { // if on a fork, don't go further back than ancestor
-      parentOf = protocolContext.getBlockchain().getBlockHeader(parentOf.get().getParentHash());
+      parentOf = blockchain.getBlockHeader(parentOf.get().getParentHash());
     }
 
     if (parentOf.isPresent()
@@ -816,6 +838,18 @@ public class MergeCoordinator implements MergeMiningCoordinator, BadChainListene
           .log();
       return false;
     }
+  }
+
+  /**
+   * Returns true if the given header is the canonical block at its height -- i.e. its hash matches
+   * the canonical chain's hash for that block number. Used as an O(1) ancestry shortcut that reads
+   * the stored number->hash index instead of recomputing header hashes.
+   */
+  private static boolean isCanonical(final Blockchain blockchain, final BlockHeader header) {
+    return blockchain
+        .getBlockHashByNumber(header.getNumber())
+        .map(canonicalHash -> canonicalHash.equals(header.getBlockHash()))
+        .orElse(false);
   }
 
   @Override
